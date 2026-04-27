@@ -1,6 +1,6 @@
 ---
 name: 1C-httpExecutor
-description: Use proactively for any task that needs to run code on a 1С base via the deployed dev HTTP service — querying/creating/updating/deleting catalog or document data, reading object logs, dumping metadata, sandboxing a code candidate before adding it to a module, or testing the body of a future processing inline. Sends POST to the dev HTTP service URL provided via the ONEC_DEV_URL environment variable. Do NOT use this agent to edit Module.bsl, redeploy via Designer, or work without ONEC_DEV_URL configured.
+description: Use proactively for any task that needs to run code on a 1С base via the deployed dev HTTP service. Especially well-suited for **mock / test data management** — bulk-loading fixtures into catalogs and documents, generating large datasets for performance tests, cleaning up test records (hard delete or ПометкаУдаления), and resetting a catalog/document/register to a known state between test runs. Also covers: ad-hoc querying/creating/updating/deleting business data, reading object logs, dumping metadata, sandboxing a code candidate before adding it to a module, and testing the body of a future processing inline. Sends POST to the dev HTTP service URL provided via the ONEC_DEV_URL environment variable. Do NOT use this agent to edit Module.bsl, redeploy via Designer, or work without ONEC_DEV_URL configured.
 tools: PowerShell, Bash, Read
 ---
 
@@ -80,6 +80,63 @@ curl -sS -X POST "$ONEC_DEV_URL/read" \
   -H 'Content-Type: application/json; charset=utf-8' \
   --data-binary @/tmp/payload.json
 ```
+
+## Mock data patterns — типовые сценарии
+
+**Массовая загрузка фикстур** (bulk create) в одной транзакции:
+```bsl
+Создано = Новый Массив;
+НачатьТранзакцию();
+Попытка
+    Для Сч = 1 По Параметры.количество Цикл
+        Эл = Справочники.ТестовыеДанные.СоздатьЭлемент();
+        Эл.Наименование = Параметры.префикс + "-" + Формат(Сч, "ЧЦ=4; ЧВН=");
+        Эл.Записать();
+        Создано.Добавить(Эл.Код);
+    КонецЦикла;
+    ЗафиксироватьТранзакцию();
+Исключение
+    ОтменитьТранзакцию();
+    ВызватьИсключение;
+КонецПопытки;
+Результат = Новый Структура("создано, первый, последний",
+    Создано.Количество(), Создано[0], Создано[Создано.ВГраница()]);
+```
+
+**Очистка тестовых данных** (hard delete по фильтру):
+```bsl
+Запрос = Новый Запрос("ВЫБРАТЬ Ссылка ИЗ Справочник.ТестовыеДанные ГДЕ Наименование ПОДОБНО &Шаблон");
+Запрос.УстановитьПараметр("Шаблон", Параметры.префикс + "-%");
+Удалено = 0;
+Выборка = Запрос.Выполнить().Выбрать();
+НачатьТранзакцию();
+Попытка
+    Пока Выборка.Следующий() Цикл
+        Об = Выборка.Ссылка.ПолучитьОбъект();
+        Если Об <> Неопределено Тогда
+            Об.Удалить();         // безусловное удаление, минуя пометку
+            Удалено = Удалено + 1;
+        КонецЕсли;
+    КонецЦикла;
+    ЗафиксироватьТранзакцию();
+Исключение
+    ОтменитьТранзакцию();
+    ВызватьИсключение;
+КонецПопытки;
+Результат = Новый Структура("удалено", Удалено);
+```
+
+**Мягкое удаление** (`ПометкаУдаления = Истина` вместо `Удалить()`) — если нужно сохранить ссылочную целостность для зависимых записей. Структура та же, заменить `Об.Удалить()` на `Об.УстановитьПометкуУдаления(Истина)`.
+
+**Сброс справочника к чистому состоянию** между тестами — комбинируй очистку выше + проверку, что осталось 0 записей:
+```bsl
+// ... код удаления выше ...
+Запрос2 = Новый Запрос("ВЫБРАТЬ КОЛИЧЕСТВО(*) КАК Кол ИЗ Справочник.ТестовыеДанные");
+Осталось = Запрос2.Выполнить().Выгрузить()[0].Кол;
+Результат = Новый Структура("удалено, осталось", Удалено, Осталось);
+```
+
+Используй `executionMs` из ответа, чтобы понимать, во сколько обходится фикстура — для 100-1000 записей это типично десятки миллисекунд.
 
 ## Conventions you must follow
 
