@@ -1,0 +1,25 @@
+<!--
+  Configuration.snippet.xml — НЕ полный Configuration.xml.
+
+  Это фрагмент, который нужно вклеить в существующий Configuration.xml
+  целевой 1С-конфигурации, ТОЛЬКО ЕСЛИ объект HTTPService.dev в ней
+  ещё не зарегистрирован. Если /dev уже есть — пропусти этот шаг,
+  достаточно положить onec/HTTPServices/dev.xml + dev/Ext/Module.bsl
+  поверх дампа и запустить /LoadConfigFromFiles + /UpdateDBCfg.
+
+  Куда вставлять:
+      <Configuration ...>
+          ...
+          <ChildObjects>
+              ...уже существующие записи...
+              <HTTPService>dev</HTTPService>     <!-- ← добавь эту строку -->
+          </ChildObjects>
+      </Configuration>
+
+  GUID объекта зашит в onec/HTTPServices/dev.xml как
+  uuid="7f2f20a5-f391-434e-a034-6dd4f05bc7ac". Если в твоей базе уже
+  есть HTTPService с таким GUID — будет конфликт; в этом случае
+  поменяй UUID в dev.xml на новый случайный (и аналогично для
+  ChildObjects URLTemplate / Method).
+-->
+<HTTPService>dev</HTTPService>
